@@ -324,7 +324,7 @@ function CameraRig({ engine }) {
     if (!actor) return
 
     const smoothing = 1 - Math.exp(-delta * 7)
-    const desiredCameraPosition = new Vector3(actor.x, 16, actor.z + 8)
+    const desiredCameraPosition = new Vector3(actor.x, 14.5, actor.z + 8)
     camera.position.lerp(desiredCameraPosition, smoothing)
 
     lookTarget.current.lerp(new Vector3(actor.x, 0.8, actor.z), smoothing)
