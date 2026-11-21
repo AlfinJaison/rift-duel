@@ -58,6 +58,8 @@ function createEngine(player) {
     keys: new Set(),
     queued: [],
     nextBotSkill: 1.5,
+    aimX: player === 'yone' ? 3.2 : -3.2,
+    aimZ: 0,
   }
 }
 
@@ -90,14 +92,14 @@ function addEffect(engine, type, from, to, color) {
   })
 }
 
-function applyHit(engine, attacker, target, skill, type) {
+function applyHit(engine, attacker, target, skill, type, effectTarget = target) {
   const data = SKILL_DATA[attacker.id][skill]
   const distance = Math.hypot(attacker.x - target.x, attacker.z - target.z)
   if (distance > data.range) return false
   target.health = Math.max(0, target.health - data.damage)
   target.actionTimer = Math.max(target.actionTimer, 0.18)
   pushAnimation(target, 'hit')
-  addEffect(engine, type, attacker, target, data.color)
+  addEffect(engine, type, attacker, effectTarget, data.color)
   if (target.health <= 0) engine.winner = attacker.id
   return true
 }
@@ -105,20 +107,34 @@ function applyHit(engine, attacker, target, skill, type) {
 function castSkill(engine, actor, target, skill) {
   const data = SKILL_DATA[actor.id][skill]
   if (!data || actor.cooldowns[skill] > 0 || actor.health <= 0) return
-  actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
+  const aimX = actor.id === engine.player ? engine.aimX : target.x
+  const aimZ = actor.id === engine.player ? engine.aimZ : target.z
+  const directionX = aimX - actor.x
+  const directionZ = aimZ - actor.z
+  const aimDistance = Math.hypot(directionX, directionZ)
+  const aimDirectionX = aimDistance > 0.001 ? directionX / aimDistance : 0
+  const aimDirectionZ = aimDistance > 0.001 ? directionZ / aimDistance : 1
+  actor.facing = Math.atan2(directionX, directionZ)
   actor.cooldowns[skill] = data.cooldown
   actor.actionTimer = 0
   pushAnimation(actor, data.animation)
   if (skill === 'e') {
-    const dx = target.x - actor.x
-    const dz = target.z - actor.z
+    const dx = directionX
+    const dz = directionZ
     const distance = Math.hypot(dx, dz) || 1
     const dash = Math.min(1.75, Math.max(0, distance - 1.6))
     actor.x += (dx / distance) * dash
     actor.z += (dz / distance) * dash
+    actor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, actor.x))
+    actor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, actor.z))
   }
-  const didHit = applyHit(engine, actor, target, skill, skill)
-  if (!didHit) addEffect(engine, skill, actor, target, data.color)
+  const effectDistance = Math.min(data.range, aimDistance)
+  const effectTarget = {
+    x: actor.x + aimDirectionX * effectDistance,
+    z: actor.z + aimDirectionZ * effectDistance,
+  }
+  const didHit = applyHit(engine, actor, target, skill, skill, effectTarget)
+  if (!didHit) addEffect(engine, skill, actor, effectTarget, data.color)
 }
 
 function castAttack(engine, actor, target) {
@@ -184,7 +200,9 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     playerActor.z += moveZ * speed * dt
     playerActor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, playerActor.x))
     playerActor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, playerActor.z))
-    playerActor.facing = Math.atan2(moveX, moveZ)
+    if (playerActor.animation === 'idle' || playerActor.animation === 'move') {
+      playerActor.facing = Math.atan2(moveX, moveZ)
+    }
   } else if (playerActor.targetX !== null) {
     playerActor.targetX = null
     playerActor.targetZ = null
@@ -249,7 +267,7 @@ function RightClickMovement({ engine }) {
   const rightHeld = useRef(false)
 
   useEffect(() => {
-    const setTargetFromEvent = (event) => {
+    const updatePointerTarget = (event, moveActor) => {
       const rect = gl.domElement.getBoundingClientRect()
       pointer.current.set(
         ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -257,20 +275,25 @@ function RightClickMovement({ engine }) {
       )
       raycaster.current.setFromCamera(pointer.current, camera)
       if (!raycaster.current.ray.intersectPlane(ground.current, intersection.current)) return
-      const actor = engine.current?.actors[engine.current.player]
+      const current = engine.current
+      const actor = current?.actors[current.player]
       if (!actor) return
-      actor.targetX = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, intersection.current.x))
-      actor.targetZ = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, intersection.current.z))
+      current.aimX = intersection.current.x
+      current.aimZ = intersection.current.z
+      if (moveActor) {
+        actor.targetX = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, intersection.current.x))
+        actor.targetZ = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, intersection.current.z))
+      }
     }
 
     const handlePointerDown = (event) => {
       if (event.button !== 2) return
       event.preventDefault()
       rightHeld.current = true
-      setTargetFromEvent(event)
+      updatePointerTarget(event, true)
     }
     const handlePointerMove = (event) => {
-      if (rightHeld.current) setTargetFromEvent(event)
+      updatePointerTarget(event, rightHeld.current)
     }
     const handlePointerUp = (event) => {
       if (event.button === 2) rightHeld.current = false
