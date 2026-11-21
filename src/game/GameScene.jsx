@@ -38,7 +38,6 @@ function createActor(id, x) {
     cooldowns: { q: 0, w: 0, e: 0, r: 0, attack: 0 },
     animation: 'idle',
     token: 0,
-    actionTimer: 0,
     aiTimer: 0.8,
   }
 }
@@ -97,8 +96,6 @@ function applyHit(engine, attacker, target, skill, type, effectTarget = target) 
   const distance = Math.hypot(attacker.x - target.x, attacker.z - target.z)
   if (distance > data.range) return false
   target.health = Math.max(0, target.health - data.damage)
-  target.actionTimer = Math.max(target.actionTimer, 0.18)
-  pushAnimation(target, 'hit')
   addEffect(engine, type, attacker, effectTarget, data.color)
   if (target.health <= 0) engine.winner = attacker.id
   return true
@@ -116,7 +113,6 @@ function castSkill(engine, actor, target, skill) {
   const aimDirectionZ = aimDistance > 0.001 ? directionZ / aimDistance : 1
   actor.facing = Math.atan2(directionX, directionZ)
   actor.cooldowns[skill] = data.cooldown
-  actor.actionTimer = 0
   pushAnimation(actor, data.animation)
   if (skill === 'e') {
     const dx = directionX
@@ -142,7 +138,6 @@ function castAttack(engine, actor, target) {
   if (actor.cooldowns.attack > 0 || actor.health <= 0) return
   actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
   actor.cooldowns.attack = data.cooldown
-  actor.actionTimer = 0
   pushAnimation(actor, 'attack')
   applyHit(engine, actor, target, 'attack', 'attack')
 }
@@ -158,8 +153,12 @@ function updateActorPositions(actors, refs) {
   }
 }
 
+function isActionLocked(actor) {
+  return actor.animation !== 'idle' && actor.animation !== 'move'
+}
+
 function setLocomotion(engine, actor, moving) {
-  if (actor.actionTimer > 0 || (actor.animation !== 'idle' && actor.animation !== 'move')) return
+  if (isActionLocked(actor)) return
   const next = moving ? 'move' : 'idle'
   if (actor.animation !== next) pushAnimation(actor, next)
 }
@@ -182,12 +181,12 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
 
   for (const actor of Object.values(engine.actors)) {
     for (const skill of [...ABILITY_KEYS, 'attack']) actor.cooldowns[skill] = Math.max(0, actor.cooldowns[skill] - dt)
-    actor.actionTimer = Math.max(0, actor.actionTimer - dt)
   }
 
   let moveX = 0
   let moveZ = 0
-  if (playerActor.targetX !== null && playerActor.targetZ !== null) {
+  const playerActionLocked = isActionLocked(playerActor)
+  if (!playerActionLocked && playerActor.targetX !== null && playerActor.targetZ !== null) {
     moveX = playerActor.targetX - playerActor.x
     moveZ = playerActor.targetZ - playerActor.z
   }
@@ -203,11 +202,11 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     if (playerActor.animation === 'idle' || playerActor.animation === 'move') {
       playerActor.facing = Math.atan2(moveX, moveZ)
     }
-  } else if (playerActor.targetX !== null) {
+  } else if (!playerActionLocked && playerActor.targetX !== null) {
     playerActor.targetX = null
     playerActor.targetZ = null
   }
-  setLocomotion(engine, playerActor, moveLength > 0.12)
+  setLocomotion(engine, playerActor, !playerActionLocked && moveLength > 0.12)
 
   while (engine.queued.length) {
     const key = engine.queued.shift()
@@ -222,26 +221,30 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     const dz = playerActor.z - bot.z
     const distance = Math.hypot(dx, dz) || 1
     bot.aiTimer -= dt
-    if (distance > 2.05) {
-      const speed = 2.05
-      bot.x += (dx / distance) * speed * dt
-      bot.z += (dz / distance) * speed * dt
-      bot.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, bot.x))
-      bot.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, bot.z))
-      setLocomotion(engine, bot, true)
-    } else {
-      setLocomotion(engine, bot, false)
-      if (bot.aiTimer <= 0) {
-        castAttack(engine, bot, playerActor)
-        bot.aiTimer = 1.05 + Math.random() * 0.35
+    if (!isActionLocked(bot)) {
+      if (distance > 2.05) {
+        const speed = 2.05
+        bot.x += (dx / distance) * speed * dt
+        bot.z += (dz / distance) * speed * dt
+        bot.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, bot.x))
+        bot.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, bot.z))
+        setLocomotion(engine, bot, true)
+      } else {
+        setLocomotion(engine, bot, false)
+        if (bot.aiTimer <= 0) {
+          castAttack(engine, bot, playerActor)
+          bot.aiTimer = 1.05 + Math.random() * 0.35
+        }
       }
     }
 
-    engine.nextBotSkill -= dt
-    if (engine.nextBotSkill <= 0 && distance < 6.2) {
-      const candidates = ['q', 'e', 'r'].filter((skill) => bot.cooldowns[skill] <= 0 && distance <= SKILL_DATA[bot.id][skill].range)
-      if (candidates.length) castSkill(engine, bot, playerActor, candidates[Math.floor(Math.random() * candidates.length)])
-      engine.nextBotSkill = 2.2 + Math.random() * 1.4
+    if (!isActionLocked(bot)) {
+      engine.nextBotSkill -= dt
+      if (engine.nextBotSkill <= 0 && distance < 6.2) {
+        const candidates = ['q', 'e', 'r'].filter((skill) => bot.cooldowns[skill] <= 0 && distance <= SKILL_DATA[bot.id][skill].range)
+        if (candidates.length) castSkill(engine, bot, playerActor, candidates[Math.floor(Math.random() * candidates.length)])
+        engine.nextBotSkill = 2.2 + Math.random() * 1.4
+      }
     }
   }
 
@@ -389,7 +392,6 @@ function GameScene({ player, round, onHud }) {
   const handleAnimationComplete = useCallback((id) => {
     const actor = engine.current.actors[id]
     if (!actor) return
-    actor.actionTimer = 0
     pushAnimation(actor, 'idle')
     setVisuals((previous) => ({
       ...previous,

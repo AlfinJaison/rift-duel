@@ -16,7 +16,6 @@ const ANIMATION_MAP = {
     w: ['Spell2', 'Spell2_ToIdle'],
     e: ['Spell3_Dash', 'Spell3_BodyIn', 'Spell3_BodyLoop', 'Spell3_Out'],
     r: ['Spell4', 'Spell4_Out', 'Spell4_Out_Moving'],
-    hit: ['Idle1_Base'],
   },
   mordekaiser: {
     idle: ['Idle.anm', 'Battle_Idle'],
@@ -26,7 +25,6 @@ const ANIMATION_MAP = {
     w: ['Spell2_Cast.anm', 'Spell2_Consume_Shield.anm'],
     e: ['Spell3_Cast.anm', 'Spell3_Cast_Walk.anm'],
     r: ['Spell4', 'Spell4_To_Idle'],
-    hit: ['Battle_Idle'],
   },
 }
 
