@@ -12,7 +12,7 @@ const ANIMATION_MAP = {
     idle: ['Idle1_Base'],
     move: ['Run_Base', 'Yone_Run01', 'Run_Fast'],
     attack: ['Attack1', 'Attack2', 'Attack3', 'Attack4', 'Yone_Attacks_Fast01.anm'],
-    q: ['Spell1C_In', 'Spell1C_Out','Spell1C_ToIdle'],
+    q: ['Yone_Spell1_A_01.anm', 'Yone_Spell1_A_02.anm', 'Spell1C_ToIdle'],
     w: ['Spell2', 'Spell2_ToIdle'],
     e: ['Spell3_Dash', 'Spell3_BodyIn', 'Spell3_BodyLoop', 'Spell3_Out'],
     r: ['Spell4', 'Spell4_Out', 'Spell4_Out_Moving'],
@@ -30,7 +30,7 @@ const ANIMATION_MAP = {
   },
 }
 
-const Champion = forwardRef(function Champion({ id, initialPosition, animation, token }, externalRef) {
+const Champion = forwardRef(function Champion({ id, initialPosition, animation, token, onAnimationComplete }, externalRef) {
   const innerRoot = useRef(null)
   const { scene, animations } = useGLTF(MODEL_URLS[id])
   const modelSetup = useMemo(() => {
@@ -59,20 +59,33 @@ const Champion = forwardRef(function Champion({ id, initialPosition, animation, 
   useEffect(() => {
     const clips = ANIMATION_MAP[id][animation] || ANIMATION_MAP[id].idle
     let index = 0
+    let activeAction = null
+    const blendDuration = 0.18
 
     const play = () => {
       const action = actions[clips[index]]
+      if (!action) {
+        if (index >= clips.length - 1) onAnimationComplete?.(id)
+        return
+      }
 
       if (animation === 'idle' || animation === 'move') {
         action.reset()
         action.setLoop(LoopRepeat, Infinity)
-        action.play()
-        return
+      } else {
+        action.reset()
+        action.setLoop(LoopOnce, 1)
       }
 
-      action.reset()
-      action.setLoop(LoopOnce, 1)
+      action.clampWhenFinished = true
       action.play()
+
+      if (activeAction && activeAction !== action) {
+        activeAction.crossFadeTo(action, blendDuration, true)
+      } else if (!activeAction) {
+        action.fadeIn(blendDuration)
+      }
+      activeAction = action
     }
 
     play()
@@ -80,11 +93,20 @@ const Champion = forwardRef(function Champion({ id, initialPosition, animation, 
     const onFinished = (event) => {
       if (event.action !== actions[clips[index]]) return
       index += 1
-      if (index < clips.length) play()
+      if (index < clips.length) {
+        play()
+        return
+      }
+      onAnimationComplete?.(id)
     }
 
     mixer.addEventListener('finished', onFinished)
-  }, [actions, animation, id, mixer])
+
+    return () => {
+      mixer.removeEventListener('finished', onFinished)
+      if (activeAction) activeAction.fadeOut(blendDuration)
+    }
+  }, [actions, animation, id, mixer, onAnimationComplete, token])
 
   return (
     <group ref={externalRef} position={initialPosition}>

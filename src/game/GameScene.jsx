@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, Html } from '@react-three/drei'
 import { Plane, Raycaster, Vector2, Vector3 } from 'three'
@@ -107,7 +107,7 @@ function castSkill(engine, actor, target, skill) {
   if (!data || actor.cooldowns[skill] > 0 || actor.health <= 0) return
   actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
   actor.cooldowns[skill] = data.cooldown
-  actor.actionTimer = skill === 'r' ? 0.6 : 0.38
+  actor.actionTimer = 0
   pushAnimation(actor, data.animation)
   if (skill === 'e') {
     const dx = target.x - actor.x
@@ -126,7 +126,7 @@ function castAttack(engine, actor, target) {
   if (actor.cooldowns.attack > 0 || actor.health <= 0) return
   actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
   actor.cooldowns.attack = data.cooldown
-  actor.actionTimer = 0.3
+  actor.actionTimer = 0
   pushAnimation(actor, 'attack')
   applyHit(engine, actor, target, 'attack', 'attack')
 }
@@ -143,7 +143,7 @@ function updateActorPositions(actors, refs) {
 }
 
 function setLocomotion(engine, actor, moving) {
-  if (actor.actionTimer > 0) return
+  if (actor.actionTimer > 0 || (actor.animation !== 'idle' && actor.animation !== 'move')) return
   const next = moving ? 'move' : 'idle'
   if (actor.animation !== next) pushAnimation(actor, next)
 }
@@ -294,20 +294,17 @@ function RightClickMovement({ engine }) {
 
 function CameraRig({ engine }) {
   const { camera } = useThree()
-  const lookTarget = useRef(new Vector3(0, 0.8, -4.5))
+  const lookTarget = useRef(new Vector3(0, 0.8, 0))
 
   useFrame((_, delta) => {
     const actor = engine.current?.actors[engine.current.player]
     if (!actor) return
 
     const smoothing = 1 - Math.exp(-delta * 7)
-    const cameraX = Math.max(-ARENA_BOUNDS.x * 0.55, Math.min(ARENA_BOUNDS.x * 0.55, actor.x))
-    const desiredCameraPosition = new Vector3(cameraX, 12, actor.z + 10.5)
+    const desiredCameraPosition = new Vector3(actor.x, 16, actor.z + 8)
     camera.position.lerp(desiredCameraPosition, smoothing)
 
-    const targetX = cameraX
-    const targetZ = actor.z - 4.5
-    lookTarget.current.lerp(new Vector3(targetX, 0.8, targetZ), smoothing)
+    lookTarget.current.lerp(new Vector3(actor.x, 0.8, actor.z), smoothing)
     camera.lookAt(lookTarget.current)
   })
 
@@ -366,6 +363,16 @@ function GameScene({ player, round, onHud }) {
     yone: { animation: 'idle', token: 0 },
     mordekaiser: { animation: 'idle', token: 0 },
   })
+  const handleAnimationComplete = useCallback((id) => {
+    const actor = engine.current.actors[id]
+    if (!actor) return
+    actor.actionTimer = 0
+    pushAnimation(actor, 'idle')
+    setVisuals((previous) => ({
+      ...previous,
+      [id]: { animation: 'idle', token: actor.token },
+    }))
+  }, [])
 
   useEffect(() => {
     engine.current = createEngine(player)
@@ -412,6 +419,7 @@ function GameScene({ player, round, onHud }) {
           initialPosition={[-3.2, 0, 0]}
           animation={visuals.yone.animation}
           token={visuals.yone.token}
+          onAnimationComplete={handleAnimationComplete}
         />
       </Suspense>
       {effects.map((effect) => <CombatEffect key={effect.id} effect={effect} />)}
