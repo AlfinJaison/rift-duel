@@ -48,10 +48,12 @@ const Champion = forwardRef(function Champion({ id, initialPosition, animation, 
     const size = bounds.getSize(new Vector3())
     const center = bounds.getCenter(new Vector3())
     const scale = TARGET_HEIGHT[id] / Math.max(0.01, size.y)
+    const groundMarker = clone.getObjectByName('Buffbone_Glb_Ground_Loc')
+    const groundPosition = groundMarker?.getWorldPosition(new Vector3()) || center
     return {
       scene: clone,
       scale,
-      offset: [-center.x * scale, -bounds.min.y * scale, -center.z * scale],
+      offset: [-groundPosition.x * scale, -bounds.min.y * scale, -groundPosition.z * scale],
     }
   }, [id, scene])
   const { actions, mixer } = useAnimations(animations, innerRoot)

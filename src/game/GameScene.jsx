@@ -444,6 +444,14 @@ function GameScene({ player, round, onHud }) {
           token={visuals.yone.token}
           onAnimationComplete={handleAnimationComplete}
         />
+        <Champion
+          ref={mordekaiserRef}
+          id="mordekaiser"
+          initialPosition={[3.2, 0, 0]}
+          animation={visuals.mordekaiser.animation}
+          token={visuals.mordekaiser.token}
+          onAnimationComplete={handleAnimationComplete}
+        />
       </Suspense>
       {effects.map((effect) => <CombatEffect key={effect.id} effect={effect} />)}
     </>
