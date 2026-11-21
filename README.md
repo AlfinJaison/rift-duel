@@ -1,0 +1,23 @@
+# Rift Duel
+
+A small React and React Three Fiber duel prototype built around the champion GLBs in `champion_models/`.
+
+## Run locally
+
+```sh
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite. The GLB files are loaded directly from `champion_models/`; no extra asset copy is needed.
+
+## Controls
+
+- `W`, `A`, `S`, `D` to move
+- Arrow keys also move; use `ArrowUp` to move forward without activating Yone or Mordekaiser's `W`
+- `Space` for a basic attack
+- `Q`, `W`, `E`, `R` for the four abilities
+- Use the champion buttons in the top right to choose who you control; the other champion is the bot
+- `Fight Again` starts a fresh round
+
+The arena is built from lightweight Three.js geometry because this folder does not include a terrain model.
