@@ -64,6 +64,31 @@ export function isTargetInsideHitbox(origin, target, facing, hitbox) {
   return isPointInPolygon(target, createHitboxPolygon(origin, facing, hitbox))
 }
 
+function isCircleTouchingPolygon(circle, radius, polygon) {
+  if (isPointInPolygon(circle, polygon)) return true
+  const radiusSquared = radius * radius
+
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index]
+    const end = polygon[(index + 1) % polygon.length]
+    const dx = end[0] - start[0]
+    const dz = end[1] - start[1]
+    const lengthSquared = dx * dx + dz * dz
+    const amount = lengthSquared > 0
+      ? Math.max(0, Math.min(1, ((circle.x - start[0]) * dx + (circle.z - start[1]) * dz) / lengthSquared))
+      : 0
+    const closestX = start[0] + dx * amount
+    const closestZ = start[1] + dz * amount
+    if ((circle.x - closestX) ** 2 + (circle.z - closestZ) ** 2 <= radiusSquared) return true
+  }
+  return false
+}
+
+export function isColliderTouchingHitbox(origin, target, facing, hitbox, colliderRadius) {
+  const polygon = createHitboxPolygon(origin, facing, hitbox)
+  return isCircleTouchingPolygon(target, colliderRadius, polygon)
+}
+
 export function getHitboxForwardExtent(hitbox) {
   if (hitbox.type === 'rectangle') return hitbox.length
   if (hitbox.type === 'equilateralTriangle') return hitbox.side * Math.sqrt(3) / 2

@@ -5,7 +5,7 @@ import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
 import DamageNumber from './DamageNumber.jsx'
-import { createHitboxPolygon, getHitboxForwardExtent, isTargetInsideHitbox } from './hitboxes.js'
+import { createHitboxPolygon, getHitboxForwardExtent, isColliderTouchingHitbox } from './hitboxes.js'
 import {
   clearActorPath,
   createMovementState,
@@ -105,8 +105,11 @@ function addDamageNumber(engine, target, damage) {
 
 function isSkillHit(actor, target, skill) {
   const data = CHAMPIONS[actor.id].skills[skill]
-  if (data.hitbox) return isTargetInsideHitbox(actor, target, actor.facing, data.hitbox)
-  return Math.hypot(actor.x - target.x, actor.z - target.z) <= data.range
+  const targetRadius = CHAMPIONS[target.id].colliderRadius
+  if (data.hitbox) {
+    return isColliderTouchingHitbox(actor, target, actor.facing, data.hitbox, targetRadius)
+  }
+  return Math.hypot(actor.x - target.x, actor.z - target.z) <= data.range + targetRadius
 }
 
 function applyHit(engine, attacker, target, skill, type, effectTarget = target) {
@@ -170,7 +173,7 @@ function castAttack(engine, actor, target) {
   const data = CHAMPIONS[actor.id].skills.attack
   if (isActionLocked(actor) || actor.cooldowns.attack > 0 || actor.health <= 0) return
   const distance = Math.hypot(target.x - actor.x, target.z - actor.z)
-  if (distance > data.range) return
+  if (distance > data.range + CHAMPIONS[target.id].colliderRadius) return
   actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
   actor.cooldowns.attack = data.cooldown
   pushAnimation(actor, actor.nextAttack)
