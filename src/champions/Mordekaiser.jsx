@@ -11,6 +11,7 @@ export const mordekaiser = {
   accent: '#49c9aa',
   ringColor: '#9b78e9',
   targetHeight: 2.75,
+  colliderRadius: 0.66,
   spawnPosition: [3.2, 0],
   initialFacing: Math.PI,
   modelUrl,

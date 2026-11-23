@@ -5,21 +5,29 @@ import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
 import { createHitboxPolygon, getHitboxForwardExtent, isTargetInsideHitbox } from './hitboxes.js'
+import {
+  clearActorPath,
+  createMovementState,
+  moveActorToPosition,
+  refreshActorPath,
+  setActorPath,
+  shouldReplanActorPath,
+  walkActorPath,
+} from './collision.js'
 import { CHAMPIONS } from '../champions/index.js'
 import Yone from '../champions/Yone.jsx'
 import Mordekaiser from '../champions/Mordekaiser.jsx'
 
 const ABILITY_KEYS = ['q', 'w', 'e', 'r']
 const MAX_HEALTH = 100
-const ARENA_BOUNDS = { x: 8.2, z: 4.2 }
+
 function createActor(id) {
   const champion = CHAMPIONS[id]
   return {
     id,
     x: champion.spawnPosition[0],
     z: champion.spawnPosition[1],
-    targetX: null,
-    targetZ: null,
+    ...createMovementState(),
     facing: champion.initialFacing,
     eClone: null,
     eReturnAt: null,
@@ -109,7 +117,15 @@ function castSkill(engine, actor, target, skill) {
   const aimDirectionZ = aimDistance > 0.001 ? directionZ / aimDistance : 1
   actor.cooldowns[skill] = data.cooldown
   if (data.cast) {
-    data.cast({ actor, target, engine, aimX, aimZ, arenaBounds: ARENA_BOUNDS })
+    data.cast({
+      actor,
+      target,
+      engine,
+      aimX,
+      aimZ,
+      moveTo: (position) => moveActorToPosition(engine, actor, position),
+    })
+    refreshActorPath(engine, actor)
     return
   }
 
@@ -120,10 +136,11 @@ function castSkill(engine, actor, target, skill) {
     const dz = directionZ
     const distance = Math.hypot(dx, dz) || 1
     const dash = Math.min(1.75, Math.max(0, distance - 1.6))
-    actor.x += (dx / distance) * dash
-    actor.z += (dz / distance) * dash
-    actor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, actor.x))
-    actor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, actor.z))
+    moveActorToPosition(engine, actor, {
+      x: actor.x + (dx / distance) * dash,
+      z: actor.z + (dz / distance) * dash,
+    })
+    refreshActorPath(engine, actor)
   }
   const skillRange = data.hitbox ? getHitboxForwardExtent(data.hitbox) : data.range
   const effectDistance = Math.min(skillRange, aimDistance)
@@ -181,12 +198,10 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
   }
   for (const actor of Object.values(engine.actors)) {
     if (actor.eReturnAt !== null && engine.clock >= actor.eReturnAt) {
-      actor.x = actor.eClone.x
-      actor.z = actor.eClone.z
+      moveActorToPosition(engine, actor, actor.eClone)
       actor.eClone = null
       actor.eReturnAt = null
-      actor.targetX = null
-      actor.targetZ = null
+      clearActorPath(actor)
     }
   }
   let publishedEffectId = engine.effectId
@@ -199,30 +214,9 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     for (const skill of [...ABILITY_KEYS, 'attack']) actor.cooldowns[skill] = Math.max(0, actor.cooldowns[skill] - dt)
   }
 
-  let moveX = 0
-  let moveZ = 0
   const playerActionLocked = isActionLocked(playerActor)
-  if (!playerActionLocked && playerActor.targetX !== null && playerActor.targetZ !== null) {
-    moveX = playerActor.targetX - playerActor.x
-    moveZ = playerActor.targetZ - playerActor.z
-  }
-  const moveLength = Math.hypot(moveX, moveZ)
-  if (moveLength > 0.12) {
-    moveX /= moveLength
-    moveZ /= moveLength
-    const speed = 4.25
-    playerActor.x += moveX * speed * dt
-    playerActor.z += moveZ * speed * dt
-    playerActor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, playerActor.x))
-    playerActor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, playerActor.z))
-    if (playerActor.animation === 'idle' || playerActor.animation === 'move') {
-      playerActor.facing = Math.atan2(moveX, moveZ)
-    }
-  } else if (!playerActionLocked && playerActor.targetX !== null) {
-    playerActor.targetX = null
-    playerActor.targetZ = null
-  }
-  setLocomotion(engine, playerActor, !playerActionLocked && moveLength > 0.12)
+  const playerMoving = !playerActionLocked && walkActorPath(engine, playerActor, 4.25, dt)
+  setLocomotion(engine, playerActor, playerMoving)
 
   while (engine.queued.length) {
     const key = engine.queued.shift()
@@ -243,13 +237,16 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     bot.aiTimer -= dt
     if (!isActionLocked(bot)) {
       if (distance > 2.05) {
-        const speed = 2.05
-        bot.x += (dx / distance) * speed * dt
-        bot.z += (dz / distance) * speed * dt
-        bot.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, bot.x))
-        bot.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, bot.z))
-        setLocomotion(engine, bot, true)
+        const desiredRange = 1.75
+        const destination = {
+          x: playerActor.x - (dx / distance) * desiredRange,
+          z: playerActor.z - (dz / distance) * desiredRange,
+        }
+        if (shouldReplanActorPath(bot, destination)) setActorPath(engine, bot, destination)
+        const botMoving = walkActorPath(engine, bot, 2.05, dt)
+        setLocomotion(engine, bot, botMoving)
       } else {
+        clearActorPath(bot)
         setLocomotion(engine, bot, false)
         if (bot.aiTimer <= 0) {
           castAttack(engine, bot, playerActor)
@@ -306,8 +303,7 @@ function RightClickMovement({ engine }) {
       current.aimX = intersection.current.x
       current.aimZ = intersection.current.z
       if (moveActor) {
-        actor.targetX = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, intersection.current.x))
-        actor.targetZ = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, intersection.current.z))
+        setActorPath(current, actor, { x: intersection.current.x, z: intersection.current.z })
       }
     }
 

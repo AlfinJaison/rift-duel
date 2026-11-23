@@ -3,7 +3,7 @@ import { useGLTF } from '@react-three/drei'
 import Champion from '../game/Champion.jsx'
 import modelUrl from '../../champion_models/yone.glb?url'
 
-function castYoneE({ actor, engine, aimX, aimZ, arenaBounds }) {
+function castYoneE({ actor, engine, aimX, aimZ, moveTo }) {
   const directionX = aimX - actor.x
   const directionZ = aimZ - actor.z
   const aimDistance = Math.hypot(directionX, directionZ)
@@ -13,8 +13,7 @@ function castYoneE({ actor, engine, aimX, aimZ, arenaBounds }) {
   actor.eClone = { x: actor.x, z: actor.z }
   actor.eReturnAt = engine.clock + 4
   actor.facing = Math.atan2(dashX, dashZ)
-  actor.x = Math.max(-arenaBounds.x, Math.min(arenaBounds.x, actor.x + dashX * 3))
-  actor.z = Math.max(-arenaBounds.z, Math.min(arenaBounds.z, actor.z + dashZ * 3))
+  moveTo({ x: actor.x + dashX * 3, z: actor.z + dashZ * 3 })
 }
 
 export const yone = {
@@ -25,6 +24,7 @@ export const yone = {
   accent: '#f29c67',
   ringColor: '#d85a69',
   targetHeight: 2.15,
+  colliderRadius: 0.52,
   spawnPosition: [-3.2, 0],
   initialFacing: 0,
   modelUrl,
