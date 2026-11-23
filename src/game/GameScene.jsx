@@ -5,14 +5,15 @@ import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import Champion from './Champion.jsx'
 import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
+import { createHitboxPolygon, getHitboxForwardExtent, isTargetInsideHitbox } from './hitboxes.js'
 
 const ABILITY_KEYS = ['q', 'w', 'e', 'r']
 const MAX_HEALTH = 100
 const ARENA_BOUNDS = { x: 8.2, z: 4.2 }
 const SKILL_DATA = {
   yone: {
-    q: { damage: 18, range: 4, cooldown: 1.0, color: '#80ded3', animation: 'q' },
-    w: { damage: 13, range: 3 * Math.sqrt(3), cooldown: 1.0, color: '#80aef3', animation: 'w' },
+    q: { damage: 18, cooldown: 1.0, color: '#80ded3', animation: 'q', hitbox: { type: 'rectangle', length: 3, width: 1 } },
+    w: { damage: 13, cooldown: 1.0, color: '#80aef3', animation: 'w', hitbox: { type: 'equilateralTriangle', side: 6 } },
     e: { damage: 17, range: 5.2, cooldown: 6.8, color: '#cf8cff', animation: 'e' },
     r: { damage: 28, range: 6.4, cooldown: 10.5, color: '#f5bd74', animation: 'r' },
     attack: { damage: 8, range: 2.25, cooldown: 0.68, color: '#e7e4cd', animation: 'attack' },
@@ -81,7 +82,8 @@ function snapshot(engine) {
 }
 
 function addEffect(engine, type, from, to, color) {
-  const hasYoneHitbox = from.id === 'yone' && (type === 'q' || type === 'w')
+  const hitboxDefinition = SKILL_DATA[from.id]?.[type]?.hitbox
+  const hitboxPolygon = hitboxDefinition ? createHitboxPolygon(from, from.facing, hitboxDefinition) : null
   engine.effects.push({
     id: ++engine.effectId,
     type,
@@ -89,33 +91,14 @@ function addEffect(engine, type, from, to, color) {
     to: [to.x, to.z],
     color,
     start: engine.clock,
-    duration: type === 'r' ? 1.05 : hasYoneHitbox ? (type === 'q' ? 1.1 : 0.9) : 0.72,
-    hitbox: hasYoneHitbox ? { shape: type, x: from.x, z: from.z, facing: from.facing } : null,
+    duration: type === 'r' ? 1.05 : hitboxDefinition ? (type === 'q' ? 1.1 : 0.9) : 0.72,
+    hitboxPolygon,
   })
 }
 
-function isYoneQHit(actor, target) {
-  const dx = target.x - actor.x
-  const dz = target.z - actor.z
-  const forward = dx * Math.sin(actor.facing) + dz * Math.cos(actor.facing)
-  const lateral = dx * Math.cos(actor.facing) - dz * Math.sin(actor.facing)
-  return forward >= 0 && forward <= 6 && Math.abs(lateral) <= 1
-}
-
-function isYoneWHit(actor, target) {
-  const dx = target.x - actor.x
-  const dz = target.z - actor.z
-  const forward = dx * Math.sin(actor.facing) + dz * Math.cos(actor.facing)
-  const lateral = dx * Math.cos(actor.facing) - dz * Math.sin(actor.facing)
-  const triangleHeight = 3 * Math.sqrt(3)
-  return forward >= 0 && forward <= triangleHeight && Math.abs(lateral) <= forward / Math.sqrt(3)
-}
-
 function isSkillHit(actor, target, skill) {
-  if (actor.id === 'yone' && skill === 'q') return isYoneQHit(actor, target)
-  if (actor.id === 'yone' && skill === 'w') return isYoneWHit(actor, target)
-
   const data = SKILL_DATA[actor.id][skill]
+  if (data.hitbox) return isTargetInsideHitbox(actor, target, actor.facing, data.hitbox)
   return Math.hypot(actor.x - target.x, actor.z - target.z) <= data.range
 }
 
@@ -151,7 +134,8 @@ function castSkill(engine, actor, target, skill) {
     actor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, actor.x))
     actor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, actor.z))
   }
-  const effectDistance = Math.min(data.range, aimDistance)
+  const skillRange = data.hitbox ? getHitboxForwardExtent(data.hitbox) : data.range
+  const effectDistance = Math.min(skillRange, aimDistance)
   const effectTarget = {
     x: actor.x + aimDirectionX * effectDistance,
     z: actor.z + aimDirectionZ * effectDistance,

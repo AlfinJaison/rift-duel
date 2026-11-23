@@ -18,49 +18,35 @@ function HitboxEdge({ start, end, color }) {
   )
 }
 
-function HitboxPreview({ hitbox, color, opacityRef }) {
-  const { shape, vertices } = useMemo(() => {
-    if (hitbox.shape === 'q') {
-      return {
-        shape: null,
-        vertices: [[-1, 0], [1, 0], [1, 6], [-1, 6]],
-      }
-    }
+function HitboxPreview({ polygon, color, opacityRef }) {
+  const shape = useMemo(() => {
+    if (polygon.length < 3) return null
 
-    const height = 3 * Math.sqrt(3)
-    return {
-      shape: new Shape().moveTo(0, 0).lineTo(-3, height).lineTo(3, height).closePath(),
-      vertices: [[0, 0], [-3, height], [3, height]],
+    const shape = new Shape()
+    shape.moveTo(polygon[0][0], polygon[0][1])
+    for (let index = 1; index < polygon.length; index += 1) {
+      shape.lineTo(polygon[index][0], polygon[index][1])
     }
-  }, [hitbox.shape])
+    shape.closePath()
+    return shape
+  }, [polygon])
 
   return (
-    <group
-      ref={opacityRef}
-      position={[hitbox.x, 0.06, hitbox.z]}
-      rotation={[0, hitbox.facing, 0]}
-    >
-      <group rotation={[Math.PI / 2, 0, 0]}>
-        {hitbox.shape === 'q' ? (
-          <mesh position={[0, 3, -0.01]}>
-            <planeGeometry args={[2, 6]} />
-            <meshBasicMaterial color={color} transparent opacity={0.22} side={DoubleSide} depthWrite={false} />
-          </mesh>
-        ) : (
-          <mesh position={[0, 0, -0.01]}>
-            <shapeGeometry args={[shape]} />
-            <meshBasicMaterial color={color} transparent opacity={0.22} side={DoubleSide} depthWrite={false} />
-          </mesh>
-        )}
-        {vertices.map((start, index) => (
-          <HitboxEdge
-            key={index}
-            start={start}
-            end={vertices[(index + 1) % vertices.length]}
-            color={color}
-          />
-        ))}
-      </group>
+    <group ref={opacityRef} position={[0, 0.06, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      {shape && (
+        <mesh position={[0, 0, -0.01]}>
+          <shapeGeometry args={[shape]} />
+          <meshBasicMaterial color={color} transparent opacity={0.22} side={DoubleSide} depthWrite={false} />
+        </mesh>
+      )}
+      {polygon.map((start, index) => (
+        <HitboxEdge
+          key={index}
+          start={start}
+          end={polygon[(index + 1) % polygon.length]}
+          color={color}
+        />
+      ))}
     </group>
   )
 }
@@ -103,8 +89,8 @@ function CombatEffect({ effect }) {
 
   return (
     <>
-      {effect.hitbox && <HitboxPreview hitbox={effect.hitbox} color={color} opacityRef={hitbox} />}
-      {!effect.hitbox && (
+      {effect.hitboxPolygon && <HitboxPreview polygon={effect.hitboxPolygon} color={color} opacityRef={hitbox} />}
+      {!effect.hitboxPolygon && (
         <group ref={group} position={[to.x, 0.05, to.z]}>
           <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[0.55, effect.type === 'r' ? 0.76 : 0.48, 48]} />
