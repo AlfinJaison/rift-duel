@@ -43,7 +43,10 @@ function getNavigationObstacles(engine, actor) {
     ...ARENA_COLLIDERS,
     ...Object.values(engine.actors)
       .filter((other) => other !== actor && other.health > 0)
-      .map((other) => ({ x: other.x, z: other.z, radius: getActorRadius(other) })),
+      .flatMap((other) => [
+        { x: other.x, z: other.z, radius: getActorRadius(other) },
+        ...(other.eClone ? [{ x: other.eClone.x, z: other.eClone.z, radius: getActorRadius(other) }] : []),
+      ]),
   ]
 }
 
@@ -88,7 +91,10 @@ function getPhysicalObstacles(engine, actor) {
     ...ARENA_COLLIDERS,
     ...Object.values(engine.actors)
       .filter((other) => other !== actor && other.health > 0)
-      .map((other) => ({ x: other.x, z: other.z, radius: getActorRadius(other) })),
+      .flatMap((other) => [
+        { x: other.x, z: other.z, radius: getActorRadius(other) },
+        ...(other.eClone ? [{ x: other.eClone.x, z: other.eClone.z, radius: getActorRadius(other) }] : []),
+      ]),
   ]
 }
 

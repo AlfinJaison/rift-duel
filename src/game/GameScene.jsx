@@ -198,7 +198,7 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
   }
   for (const actor of Object.values(engine.actors)) {
     if (actor.eReturnAt !== null && engine.clock >= actor.eReturnAt) {
-      moveActorToPosition(engine, actor, actor.eClone)
+      CHAMPIONS[actor.id].recallFromE?.(actor)
       actor.eClone = null
       actor.eReturnAt = null
       clearActorPath(actor)

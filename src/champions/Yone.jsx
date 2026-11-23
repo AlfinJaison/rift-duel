@@ -16,6 +16,12 @@ function castYoneE({ actor, engine, aimX, aimZ, moveTo }) {
   moveTo({ x: actor.x + dashX * 3, z: actor.z + dashZ * 3 })
 }
 
+function recallYoneE(actor) {
+  if (!actor.eClone) return
+  actor.x = actor.eClone.x
+  actor.z = actor.eClone.z
+}
+
 export const yone = {
   id: 'yone',
   name: 'Yone',
@@ -27,6 +33,7 @@ export const yone = {
   colliderRadius: 0.52,
   spawnPosition: [-3.2, 0],
   initialFacing: 0,
+  recallFromE: recallYoneE,
   modelUrl,
   animations: {
     idle: ['Idle1_Base'],
