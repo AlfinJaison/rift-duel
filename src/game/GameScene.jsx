@@ -137,6 +137,8 @@ function castSkill(engine, actor, target, skill) {
 function castAttack(engine, actor, target) {
   const data = SKILL_DATA[actor.id].attack
   if (isActionLocked(actor) || actor.cooldowns.attack > 0 || actor.health <= 0) return
+  const distance = Math.hypot(target.x - actor.x, target.z - actor.z)
+  if (distance > data.range) return
   actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
   actor.cooldowns.attack = data.cooldown
   pushAnimation(actor, actor.nextAttack)
