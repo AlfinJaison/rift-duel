@@ -37,6 +37,7 @@ function createActor(id, x) {
     health: MAX_HEALTH,
     cooldowns: { q: 0, w: 0, e: 0, r: 0, attack: 0 },
     animation: 'idle',
+    nextAttack: 'attack',
     token: 0,
     aiTimer: 0.8,
   }
@@ -103,7 +104,7 @@ function applyHit(engine, attacker, target, skill, type, effectTarget = target) 
 
 function castSkill(engine, actor, target, skill) {
   const data = SKILL_DATA[actor.id][skill]
-  if (!data || actor.cooldowns[skill] > 0 || actor.health <= 0) return
+  if (!data || isActionLocked(actor) || actor.cooldowns[skill] > 0 || actor.health <= 0) return
   const aimX = actor.id === engine.player ? engine.aimX : target.x
   const aimZ = actor.id === engine.player ? engine.aimZ : target.z
   const directionX = aimX - actor.x
@@ -135,10 +136,11 @@ function castSkill(engine, actor, target, skill) {
 
 function castAttack(engine, actor, target) {
   const data = SKILL_DATA[actor.id].attack
-  if (actor.cooldowns.attack > 0 || actor.health <= 0) return
+  if (isActionLocked(actor) || actor.cooldowns.attack > 0 || actor.health <= 0) return
   actor.facing = Math.atan2(target.x - actor.x, target.z - actor.z)
   actor.cooldowns.attack = data.cooldown
-  pushAnimation(actor, 'attack')
+  pushAnimation(actor, actor.nextAttack)
+  actor.nextAttack = actor.nextAttack === 'attack' ? 'attack2' : 'attack'
   applyHit(engine, actor, target, 'attack', 'attack')
 }
 
