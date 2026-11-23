@@ -30,17 +30,30 @@ const ANIMATION_MAP = {
   },
 }
 
-const Champion = forwardRef(function Champion({ id, initialPosition, animation, token, onAnimationComplete }, externalRef) {
+const Champion = forwardRef(function Champion({ id, initialPosition, animation, token, onAnimationComplete, ghost = false }, externalRef) {
   const innerRoot = useRef(null)
   const { scene, animations } = useGLTF(MODEL_URLS[id])
   const modelSetup = useMemo(() => {
     const clone = cloneSkinned(scene)
+    const meshes = []
+    const materialStates = []
     clone.traverse((object) => {
       if (object.isMesh) {
-        object.castShadow = true
-        object.receiveShadow = true
+        meshes.push(object)
         const materials = Array.isArray(object.material) ? object.material : [object.material]
-        for (const material of materials) if (material) material.side = DoubleSide
+        const displayMaterials = materials.map((material) => {
+          if (!material) return material
+          const displayMaterial = material.clone()
+          displayMaterial.side = DoubleSide
+          materialStates.push({
+            material: displayMaterial,
+            transparent: displayMaterial.transparent,
+            opacity: displayMaterial.opacity,
+            depthWrite: displayMaterial.depthWrite,
+          })
+          return displayMaterial
+        })
+        object.material = Array.isArray(object.material) ? displayMaterials : displayMaterials[0]
       }
     })
     clone.updateMatrixWorld(true)
@@ -54,9 +67,24 @@ const Champion = forwardRef(function Champion({ id, initialPosition, animation, 
       scene: clone,
       scale,
       offset: [-groundPosition.x * scale, -bounds.min.y * scale, -groundPosition.z * scale],
+      meshes,
+      materialStates,
     }
   }, [id, scene])
   const { actions, mixer } = useAnimations(animations, innerRoot)
+
+  useEffect(() => {
+    for (const mesh of modelSetup.meshes) {
+      mesh.castShadow = !ghost
+      mesh.receiveShadow = !ghost
+    }
+    for (const state of modelSetup.materialStates) {
+      state.material.transparent = ghost || state.transparent
+      state.material.opacity = ghost ? 0.42 : state.opacity
+      state.material.depthWrite = ghost ? false : state.depthWrite
+      state.material.needsUpdate = true
+    }
+  }, [ghost, modelSetup])
 
   useEffect(() => {
     const clips = ANIMATION_MAP[id][animation] || ANIMATION_MAP[id].idle
@@ -117,7 +145,7 @@ const Champion = forwardRef(function Champion({ id, initialPosition, animation, 
       </group>
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.78, 1.04, 48]} />
-        <meshBasicMaterial color={id === 'yone' ? '#d85a69' : '#9b78e9'} transparent opacity={0.33} />
+        <meshBasicMaterial color={ghost ? '#80ded3' : id === 'yone' ? '#d85a69' : '#9b78e9'} transparent opacity={ghost ? 0.55 : 0.33} />
       </mesh>
     </group>
   )

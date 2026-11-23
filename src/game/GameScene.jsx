@@ -35,6 +35,8 @@ function createActor(id, x) {
     targetX: null,
     targetZ: null,
     facing: id === 'yone' ? 0 : Math.PI,
+    eClone: null,
+    eReturnAt: null,
     health: MAX_HEALTH,
     cooldowns: { q: 0, w: 0, e: 0, r: 0, attack: 0 },
     animation: 'idle',
@@ -114,6 +116,7 @@ function applyHit(engine, attacker, target, skill, type, effectTarget = target) 
 function castSkill(engine, actor, target, skill) {
   const data = SKILL_DATA[actor.id][skill]
   if (!data || isActionLocked(actor) || actor.cooldowns[skill] > 0 || actor.health <= 0) return
+  const isYoneE = actor.id === 'yone' && skill === 'e'
   const aimX = actor.id === engine.player ? engine.aimX : target.x
   const aimZ = actor.id === engine.player ? engine.aimZ : target.z
   const directionX = aimX - actor.x
@@ -121,8 +124,18 @@ function castSkill(engine, actor, target, skill) {
   const aimDistance = Math.hypot(directionX, directionZ)
   const aimDirectionX = aimDistance > 0.001 ? directionX / aimDistance : 0
   const aimDirectionZ = aimDistance > 0.001 ? directionZ / aimDistance : 1
-  actor.facing = Math.atan2(directionX, directionZ)
+  if (!isYoneE) actor.facing = Math.atan2(directionX, directionZ)
   actor.cooldowns[skill] = data.cooldown
+  if (isYoneE) {
+    actor.eClone = { x: actor.x, z: actor.z }
+    actor.eReturnAt = engine.clock + 4
+    const dashX = aimDistance > 0.001 ? directionX / aimDistance : Math.sin(actor.facing)
+    const dashZ = aimDistance > 0.001 ? directionZ / aimDistance : Math.cos(actor.facing)
+    actor.facing = Math.atan2(dashX, dashZ)
+    actor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, actor.x + dashX * 3))
+    actor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, actor.z + dashZ * 3))
+    return
+  }
   pushAnimation(actor, data.animation)
   if (skill === 'e') {
     const dx = directionX
@@ -187,6 +200,16 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
       setEffects(stillLive.slice())
     }
     return
+  }
+  for (const actor of Object.values(engine.actors)) {
+    if (actor.eReturnAt !== null && engine.clock >= actor.eReturnAt) {
+      actor.x = actor.eClone.x
+      actor.z = actor.eClone.z
+      actor.eClone = null
+      actor.eReturnAt = null
+      actor.targetX = null
+      actor.targetZ = null
+    }
   }
   let publishedEffectId = engine.effectId
   const playerActor = engine.actors[engine.player]
@@ -406,6 +429,8 @@ function GameScene({ player, round, onHud }) {
   const refs = useRef({ yone: yoneRef, mordekaiser: mordekaiserRef })
   const engine = useRef(createEngine(player))
   const [effects, setEffects] = useState([])
+  const [yoneClonePosition, setYoneClonePosition] = useState(null)
+  const yoneCloneRef = useRef(null)
   const [visuals, setVisuals] = useState({
     yone: { animation: 'idle', token: 0 },
     mordekaiser: { animation: 'idle', token: 0 },
@@ -423,6 +448,8 @@ function GameScene({ player, round, onHud }) {
   useEffect(() => {
     engine.current = createEngine(player)
     setEffects([])
+    yoneCloneRef.current = null
+    setYoneClonePosition(null)
     setVisuals({
       yone: { animation: 'idle', token: 0 },
       mordekaiser: { animation: 'idle', token: 0 },
@@ -437,6 +464,11 @@ function GameScene({ player, round, onHud }) {
       mordekaiser: `${current.actors.mordekaiser.animation}:${current.actors.mordekaiser.token}`,
     }
     stepEngine(current, Math.min(delta, 0.04), refs.current, onHud, setEffects)
+    const clone = current.actors.yone.eClone
+    if (clone !== yoneCloneRef.current) {
+      yoneCloneRef.current = clone
+      setYoneClonePosition(clone ? [clone.x, clone.z] : null)
+    }
     const next = {
       yone: current.actors.yone,
       mordekaiser: current.actors.mordekaiser,
@@ -466,6 +498,7 @@ function GameScene({ player, round, onHud }) {
           animation={visuals.yone.animation}
           token={visuals.yone.token}
           onAnimationComplete={handleAnimationComplete}
+          ghost={Boolean(yoneClonePosition)}
         />
         <Champion
           ref={mordekaiserRef}
@@ -475,6 +508,15 @@ function GameScene({ player, round, onHud }) {
           token={visuals.mordekaiser.token}
           onAnimationComplete={handleAnimationComplete}
         />
+        {yoneClonePosition && (
+          <Champion
+            key={`${yoneClonePosition[0]}:${yoneClonePosition[1]}`}
+            id="yone"
+            initialPosition={[yoneClonePosition[0], 0, yoneClonePosition[1]]}
+            animation="idle"
+            token={0}
+          />
+        )}
       </Suspense>
       {effects.map((effect) => <CombatEffect key={effect.id} effect={effect} />)}
     </>
