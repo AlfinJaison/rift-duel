@@ -1,11 +1,75 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Color, Quaternion, Vector3 } from 'three'
+import { Color, DoubleSide, Quaternion, Shape, Vector3 } from 'three'
+
+function HitboxEdge({ start, end, color }) {
+  const positions = useMemo(() => new Float32Array([
+    start[0], start[1], -0.02,
+    end[0], end[1], -0.02,
+  ]), [start, end])
+
+  return (
+    <line frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <lineBasicMaterial color={color} transparent opacity={0.9} depthWrite={false} />
+    </line>
+  )
+}
+
+function HitboxPreview({ hitbox, color, opacityRef }) {
+  const { shape, vertices } = useMemo(() => {
+    if (hitbox.shape === 'q') {
+      return {
+        shape: null,
+        vertices: [[-1, 0], [1, 0], [1, 6], [-1, 6]],
+      }
+    }
+
+    const height = 3 * Math.sqrt(3)
+    return {
+      shape: new Shape().moveTo(0, 0).lineTo(-3, height).lineTo(3, height).closePath(),
+      vertices: [[0, 0], [-3, height], [3, height]],
+    }
+  }, [hitbox.shape])
+
+  return (
+    <group
+      ref={opacityRef}
+      position={[hitbox.x, 0.06, hitbox.z]}
+      rotation={[0, hitbox.facing, 0]}
+    >
+      <group rotation={[Math.PI / 2, 0, 0]}>
+        {hitbox.shape === 'q' ? (
+          <mesh position={[0, 3, -0.01]}>
+            <planeGeometry args={[2, 6]} />
+            <meshBasicMaterial color={color} transparent opacity={0.22} side={DoubleSide} depthWrite={false} />
+          </mesh>
+        ) : (
+          <mesh position={[0, 0, -0.01]}>
+            <shapeGeometry args={[shape]} />
+            <meshBasicMaterial color={color} transparent opacity={0.22} side={DoubleSide} depthWrite={false} />
+          </mesh>
+        )}
+        {vertices.map((start, index) => (
+          <HitboxEdge
+            key={index}
+            start={start}
+            end={vertices[(index + 1) % vertices.length]}
+            color={color}
+          />
+        ))}
+      </group>
+    </group>
+  )
+}
 
 function CombatEffect({ effect }) {
   const group = useRef(null)
   const ring = useRef(null)
   const beam = useRef(null)
+  const hitbox = useRef(null)
   const from = useMemo(() => new Vector3(effect.from[0], 0.12, effect.from[1]), [effect.from])
   const to = useMemo(() => new Vector3(effect.to[0], 0.12, effect.to[1]), [effect.to])
   const direction = useMemo(() => to.clone().sub(from), [from, to])
@@ -28,27 +92,38 @@ function CombatEffect({ effect }) {
       beam.current.scale.y = length * Math.max(0.2, pulse)
       beam.current.material.opacity = (1 - progress) * 0.78
     }
+    if (hitbox.current) {
+      const opacity = 1 - progress
+      hitbox.current.traverse((object) => {
+        if (object.material) object.material.opacity = opacity * (object.isLine ? 0.9 : 0.22)
+      })
+    }
     if (group.current) group.current.position.y = 0.045 + pulse * 0.12
   })
 
   return (
-    <group ref={group} position={[to.x, 0.05, to.z]}>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.55, effect.type === 'r' ? 0.76 : 0.48, 48]} />
-        <meshBasicMaterial color={color} transparent depthWrite={false} />
-      </mesh>
-      {(effect.type === 'q' || effect.type === 'e' || effect.type === 'r') && (
-        <mesh
-          ref={beam}
-          position={[midpoint.x - to.x, Math.max(0.18, length * 0.15), midpoint.z - to.z]}
-          quaternion={beamRotation}
-        >
-          <cylinderGeometry args={[effect.type === 'r' ? 0.22 : 0.12, effect.type === 'r' ? 0.35 : 0.22, 1, 10]} />
-          <meshBasicMaterial color={color} transparent depthWrite={false} />
-        </mesh>
+    <>
+      {effect.hitbox && <HitboxPreview hitbox={effect.hitbox} color={color} opacityRef={hitbox} />}
+      {!effect.hitbox && (
+        <group ref={group} position={[to.x, 0.05, to.z]}>
+          <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.55, effect.type === 'r' ? 0.76 : 0.48, 48]} />
+            <meshBasicMaterial color={color} transparent depthWrite={false} />
+          </mesh>
+          {(effect.type === 'q' || effect.type === 'e' || effect.type === 'r') && (
+            <mesh
+              ref={beam}
+              position={[midpoint.x - to.x, Math.max(0.18, length * 0.15), midpoint.z - to.z]}
+              quaternion={beamRotation}
+            >
+              <cylinderGeometry args={[effect.type === 'r' ? 0.22 : 0.12, effect.type === 'r' ? 0.35 : 0.22, 1, 10]} />
+              <meshBasicMaterial color={color} transparent depthWrite={false} />
+            </mesh>
+          )}
+          <pointLight position={[0, 0.75, 0]} color={color} intensity={5} distance={4} decay={2} />
+        </group>
       )}
-      <pointLight position={[0, 0.75, 0]} color={color} intensity={5} distance={4} decay={2} />
-    </group>
+    </>
   )
 }
 

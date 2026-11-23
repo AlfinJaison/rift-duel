@@ -11,8 +11,8 @@ const MAX_HEALTH = 100
 const ARENA_BOUNDS = { x: 8.2, z: 4.2 }
 const SKILL_DATA = {
   yone: {
-    q: { damage: 18, range: 3.6, cooldown: 3.4, color: '#80ded3', animation: 'q' },
-    w: { damage: 13, range: 3.1, cooldown: 1.0, color: '#80aef3', animation: 'w' },
+    q: { damage: 18, range: 4, cooldown: 1.0, color: '#80ded3', animation: 'q' },
+    w: { damage: 13, range: 3 * Math.sqrt(3), cooldown: 1.0, color: '#80aef3', animation: 'w' },
     e: { damage: 17, range: 5.2, cooldown: 6.8, color: '#cf8cff', animation: 'e' },
     r: { damage: 28, range: 6.4, cooldown: 10.5, color: '#f5bd74', animation: 'r' },
     attack: { damage: 8, range: 2.25, cooldown: 0.68, color: '#e7e4cd', animation: 'attack' },
@@ -81,6 +81,7 @@ function snapshot(engine) {
 }
 
 function addEffect(engine, type, from, to, color) {
+  const hasYoneHitbox = from.id === 'yone' && (type === 'q' || type === 'w')
   engine.effects.push({
     id: ++engine.effectId,
     type,
@@ -88,14 +89,39 @@ function addEffect(engine, type, from, to, color) {
     to: [to.x, to.z],
     color,
     start: engine.clock,
-    duration: type === 'r' ? 1.05 : 0.72,
+    duration: type === 'r' ? 1.05 : hasYoneHitbox ? (type === 'q' ? 1.1 : 0.9) : 0.72,
+    hitbox: hasYoneHitbox ? { shape: type, x: from.x, z: from.z, facing: from.facing } : null,
   })
+}
+
+function isYoneQHit(actor, target) {
+  const dx = target.x - actor.x
+  const dz = target.z - actor.z
+  const forward = dx * Math.sin(actor.facing) + dz * Math.cos(actor.facing)
+  const lateral = dx * Math.cos(actor.facing) - dz * Math.sin(actor.facing)
+  return forward >= 0 && forward <= 6 && Math.abs(lateral) <= 1
+}
+
+function isYoneWHit(actor, target) {
+  const dx = target.x - actor.x
+  const dz = target.z - actor.z
+  const forward = dx * Math.sin(actor.facing) + dz * Math.cos(actor.facing)
+  const lateral = dx * Math.cos(actor.facing) - dz * Math.sin(actor.facing)
+  const triangleHeight = 3 * Math.sqrt(3)
+  return forward >= 0 && forward <= triangleHeight && Math.abs(lateral) <= forward / Math.sqrt(3)
+}
+
+function isSkillHit(actor, target, skill) {
+  if (actor.id === 'yone' && skill === 'q') return isYoneQHit(actor, target)
+  if (actor.id === 'yone' && skill === 'w') return isYoneWHit(actor, target)
+
+  const data = SKILL_DATA[actor.id][skill]
+  return Math.hypot(actor.x - target.x, actor.z - target.z) <= data.range
 }
 
 function applyHit(engine, attacker, target, skill, type, effectTarget = target) {
   const data = SKILL_DATA[attacker.id][skill]
-  const distance = Math.hypot(attacker.x - target.x, attacker.z - target.z)
-  if (distance > data.range) return false
+  if (!isSkillHit(attacker, target, skill)) return false
   target.health = Math.max(0, target.health - data.damage)
   addEffect(engine, type, attacker, effectTarget, data.color)
   if (target.health <= 0) engine.winner = attacker.id
@@ -178,6 +204,7 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     }
     return
   }
+  let publishedEffectId = engine.effectId
   const playerActor = engine.actors[engine.player]
   const enemyId = engine.player === 'yone' ? 'mordekaiser' : 'yone'
   const bot = engine.actors[enemyId]
@@ -218,6 +245,10 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     else if (ABILITY_KEYS.includes(key)) castSkill(engine, playerActor, bot, key)
   }
 
+  if (engine.effectId !== publishedEffectId) {
+    setEffects(engine.effects.slice())
+    publishedEffectId = engine.effectId
+  }
   if (engine.winner) return
 
   if (engine.player !== 'yone') {
@@ -245,12 +276,14 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     if (!isActionLocked(bot)) {
       engine.nextBotSkill -= dt
       if (engine.nextBotSkill <= 0 && distance < 6.2) {
-        const candidates = ['q', 'e', 'r'].filter((skill) => bot.cooldowns[skill] <= 0 && distance <= SKILL_DATA[bot.id][skill].range)
+        const candidates = ['q', 'e', 'r'].filter((skill) => bot.cooldowns[skill] <= 0 && isSkillHit(bot, playerActor, skill))
         if (candidates.length) castSkill(engine, bot, playerActor, candidates[Math.floor(Math.random() * candidates.length)])
         engine.nextBotSkill = 2.2 + Math.random() * 1.4
       }
     }
   }
+
+  if (engine.effectId !== publishedEffectId) setEffects(engine.effects.slice())
 
   updateActorPositions(engine.actors, refs)
   const liveIds = new Set(engine.effects.filter((effect) => engine.clock - effect.start < effect.duration).map((effect) => effect.id))
