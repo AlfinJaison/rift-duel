@@ -5,6 +5,7 @@ import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
 import DamageNumber from './DamageNumber.jsx'
+import YoneTether from './YoneTether.jsx'
 import { createHitboxPolygon, getHitboxForwardExtent, isColliderTouchingHitbox } from './hitboxes.js'
 import {
   clearActorPath,
@@ -441,6 +442,7 @@ function GameScene({ player, round, onHud }) {
   const [damageNumbers, setDamageNumbers] = useState([])
   const [yoneClonePosition, setYoneClonePosition] = useState(null)
   const yoneCloneRef = useRef(null)
+  const yoneCloneModelRef = useRef(null)
   const [visuals, setVisuals] = useState({
     yone: { animation: 'idle', token: 0 },
     mordekaiser: { animation: 'idle', token: 0 },
@@ -519,6 +521,7 @@ function GameScene({ player, round, onHud }) {
         />
         {yoneClonePosition && (
           <Yone
+            ref={yoneCloneModelRef}
             key={`${yoneClonePosition[0]}:${yoneClonePosition[1]}`}
             initialPosition={[yoneClonePosition[0], 0, yoneClonePosition[1]]}
             animation="idle"
@@ -526,6 +529,7 @@ function GameScene({ player, round, onHud }) {
           />
         )}
       </Suspense>
+      {yoneClonePosition && <YoneTether yoneRef={yoneRef} cloneRef={yoneCloneModelRef} />}
       {effects.map((effect) => <CombatEffect key={effect.id} effect={effect} />)}
       {damageNumbers.map((item) => (
         <DamageNumber key={item.id} damage={item.damage} position={item.position} />
