@@ -6,6 +6,7 @@ import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
 import DamageNumber from './DamageNumber.jsx'
 import YoneTether from './YoneTether.jsx'
+import YoneRHitbox from './YoneRHitbox.jsx'
 import { createHitboxPolygon, getHitboxForwardExtent, isColliderTouchingHitbox } from './hitboxes.js'
 import {
   clearActorPath,
@@ -33,6 +34,7 @@ function createActor(id) {
     facing: champion.initialFacing,
     eClone: null,
     eReturnAt: null,
+    activeSkill: null,
     health: MAX_HEALTH,
     cooldowns: { q: 0, w: 0, e: 0, r: 0, attack: 0 },
     animation: 'idle',
@@ -142,8 +144,10 @@ function castSkill(engine, actor, target, skill) {
       aimX,
       aimZ,
       moveTo: (position) => moveActorToPosition(engine, actor, position),
+      pushAnimation: (name) => pushAnimation(actor, name),
     })
-    refreshActorPath(engine, actor)
+    if (actor.activeSkill) clearActorPath(actor)
+    else refreshActorPath(engine, actor)
     return
   }
 
@@ -182,6 +186,24 @@ function castAttack(engine, actor, target) {
   applyHit(engine, actor, target, 'attack', 'attack')
 }
 
+function updateActiveSkill(engine, actor, delta) {
+  const update = CHAMPIONS[actor.id].updateActiveSkill
+  if (!actor.activeSkill || !update) return
+
+  const targetId = actor.id === 'yone' ? 'mordekaiser' : 'yone'
+  const target = engine.actors[targetId]
+  update({
+    actor,
+    target,
+    delta,
+    moveTo: (position) => moveActorToPosition(engine, actor, position),
+    isSkillHit: (skill, hitTarget) => isSkillHit(actor, hitTarget, skill),
+    applySkillHit: (skill, hitTarget) => applyHit(engine, actor, hitTarget, skill, skill),
+    pushAnimation: (name) => pushAnimation(actor, name),
+    stopMovement: () => clearActorPath(actor),
+  })
+}
+
 function updateActorPositions(actors, refs) {
   for (const id of ['yone', 'mordekaiser']) {
     const node = refs[id].current
@@ -194,7 +216,7 @@ function updateActorPositions(actors, refs) {
 }
 
 function isActionLocked(actor) {
-  return actor.animation !== 'idle' && actor.animation !== 'move'
+  return Boolean(actor.activeSkill) || (actor.animation !== 'idle' && actor.animation !== 'move')
 }
 
 function setLocomotion(engine, actor, moving) {
@@ -236,6 +258,15 @@ function stepEngine(engine, dt, refs, onHud, setEffects, setDamageNumbers) {
 
   for (const actor of Object.values(engine.actors)) {
     for (const skill of [...ABILITY_KEYS, 'attack']) actor.cooldowns[skill] = Math.max(0, actor.cooldowns[skill] - dt)
+  }
+
+  for (const actor of Object.values(engine.actors)) updateActiveSkill(engine, actor, dt)
+  if (engine.winner) {
+    if (engine.effectId !== publishedEffectId) setEffects(engine.effects.slice())
+    if (engine.damageNumberId !== publishedDamageNumberId) setDamageNumbers(engine.damageNumbers.slice())
+    updateActorPositions(engine.actors, refs)
+    onHud(snapshot(engine))
+    return
   }
 
   const playerActionLocked = isActionLocked(playerActor)
@@ -285,8 +316,15 @@ function stepEngine(engine, dt, refs, onHud, setEffects, setDamageNumbers) {
 
     if (!isActionLocked(bot)) {
       engine.nextBotSkill -= dt
-      if (engine.nextBotSkill <= 0 && distance < 6.2) {
-        const candidates = ['q', 'e', 'r'].filter((skill) => bot.cooldowns[skill] <= 0 && isSkillHit(bot, playerActor, skill))
+      if (engine.nextBotSkill <= 0 && distance < 6.8) {
+        const candidates = ['q', 'e', 'r'].filter((skill) => {
+          const data = CHAMPIONS[bot.id].skills[skill]
+          if (bot.cooldowns[skill] > 0) return false
+          const castRange = data.range ?? (data.hitbox
+            ? getHitboxForwardExtent(data.hitbox) + CHAMPIONS[playerActor.id].colliderRadius
+            : 6.8)
+          return data.cast ? distance <= castRange : isSkillHit(bot, playerActor, skill)
+        })
         if (candidates.length) castSkill(engine, bot, playerActor, candidates[Math.floor(Math.random() * candidates.length)])
         engine.nextBotSkill = 2.2 + Math.random() * 1.4
       }
@@ -449,7 +487,7 @@ function GameScene({ player, round, onHud }) {
   })
   const handleAnimationComplete = useCallback((id) => {
     const actor = engine.current.actors[id]
-    if (!actor) return
+    if (!actor || actor.activeSkill) return
     pushAnimation(actor, 'idle')
     setVisuals((previous) => ({
       ...previous,
@@ -503,6 +541,7 @@ function GameScene({ player, round, onHud }) {
       <SceneLighting />
       <Arena />
       <ContactShadows position={[0, 0.015, 0]} opacity={0.33} scale={24} blur={2.4} far={7} />
+      <YoneRHitbox engine={engine} />
       <Suspense fallback={<Html center className="loading-note">Loading champion models...</Html>}>
         <Yone
           ref={yoneRef}
