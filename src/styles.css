@@ -137,6 +137,7 @@ button { font: inherit; }
 .skill-icon b { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 9, 9, 0.67); color: #f1eee5; font: 600 12px 'DM Sans', sans-serif; }
 .skill-label { color: #89958c; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
 .skill.cooling .skill-icon { filter: saturate(0.55); }
+.damage-number { color: #ff9d40; font: 800 23px/1 'Barlow Condensed', sans-serif; letter-spacing: 0.03em; -webkit-text-stroke: 1px #050608; paint-order: stroke fill; text-shadow: 0 0 8px rgba(255,157,64,.4); white-space: nowrap; will-change: opacity, transform; }
 .mode-label { display: flex; align-items: center; gap: 7px; color: #87938c; font-size: 8px; letter-spacing: 0.14em; white-space: nowrap; }
 .arena-name { left: 36px; bottom: 34px; color: rgba(226, 228, 211, 0.69); font: 600 12px 'Barlow Condensed', sans-serif; letter-spacing: 0.16em; }
 .arena-name span { display: block; margin-bottom: 4px; color: #8e9b8e; font: 500 8px 'DM Sans', sans-serif; letter-spacing: 0.2em; }

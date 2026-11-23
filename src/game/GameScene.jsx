@@ -4,6 +4,7 @@ import { ContactShadows, Html } from '@react-three/drei'
 import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
+import DamageNumber from './DamageNumber.jsx'
 import { createHitboxPolygon, getHitboxForwardExtent, isTargetInsideHitbox } from './hitboxes.js'
 import {
   clearActorPath,
@@ -50,6 +51,8 @@ function createEngine(player) {
     snapshotClock: 0,
     effects: [],
     effectId: 0,
+    damageNumbers: [],
+    damageNumberId: 0,
     keys: new Set(),
     queued: [],
     nextBotSkill: 1.5,
@@ -90,6 +93,16 @@ function addEffect(engine, type, from, to, color) {
   })
 }
 
+function addDamageNumber(engine, target, damage) {
+  engine.damageNumbers.push({
+    id: ++engine.damageNumberId,
+    damage,
+    position: [target.x, target.z],
+    start: engine.clock,
+    duration: 0.5,
+  })
+}
+
 function isSkillHit(actor, target, skill) {
   const data = CHAMPIONS[actor.id].skills[skill]
   if (data.hitbox) return isTargetInsideHitbox(actor, target, actor.facing, data.hitbox)
@@ -100,6 +113,7 @@ function applyHit(engine, attacker, target, skill, type, effectTarget = target) 
   const data = CHAMPIONS[attacker.id].skills[skill]
   if (!isSkillHit(attacker, target, skill)) return false
   target.health = Math.max(0, target.health - data.damage)
+  addDamageNumber(engine, target, data.damage)
   addEffect(engine, type, attacker, effectTarget, data.color)
   if (target.health <= 0) engine.winner = attacker.id
   return true
@@ -185,7 +199,7 @@ function setLocomotion(engine, actor, moving) {
   if (actor.animation !== next) pushAnimation(actor, next)
 }
 
-function stepEngine(engine, dt, refs, onHud, setEffects) {
+function stepEngine(engine, dt, refs, onHud, setEffects, setDamageNumbers) {
   if (!engine) return
   engine.clock += dt
   if (engine.winner) {
@@ -193,6 +207,11 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     if (stillLive.length !== engine.effects.length) {
       engine.effects = stillLive
       setEffects(stillLive.slice())
+    }
+    const liveDamageNumbers = engine.damageNumbers.filter((item) => engine.clock - item.start < item.duration)
+    if (liveDamageNumbers.length !== engine.damageNumbers.length) {
+      engine.damageNumbers = liveDamageNumbers
+      setDamageNumbers(liveDamageNumbers.slice())
     }
     return
   }
@@ -205,6 +224,7 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
     }
   }
   let publishedEffectId = engine.effectId
+  let publishedDamageNumberId = engine.damageNumberId
   const playerActor = engine.actors[engine.player]
   const enemyId = engine.player === 'yone' ? 'mordekaiser' : 'yone'
   const bot = engine.actors[enemyId]
@@ -227,6 +247,10 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
   if (engine.effectId !== publishedEffectId) {
     setEffects(engine.effects.slice())
     publishedEffectId = engine.effectId
+  }
+  if (engine.damageNumberId !== publishedDamageNumberId) {
+    setDamageNumbers(engine.damageNumbers.slice())
+    publishedDamageNumberId = engine.damageNumberId
   }
   if (engine.winner) return
 
@@ -266,12 +290,20 @@ function stepEngine(engine, dt, refs, onHud, setEffects) {
   }
 
   if (engine.effectId !== publishedEffectId) setEffects(engine.effects.slice())
+  if (engine.damageNumberId !== publishedDamageNumberId) setDamageNumbers(engine.damageNumbers.slice())
 
   updateActorPositions(engine.actors, refs)
   const liveIds = new Set(engine.effects.filter((effect) => engine.clock - effect.start < effect.duration).map((effect) => effect.id))
   if (liveIds.size !== engine.effects.length) {
     engine.effects = engine.effects.filter((effect) => liveIds.has(effect.id))
     setEffects(engine.effects.slice())
+  }
+  const liveDamageNumberIds = new Set(engine.damageNumbers
+    .filter((item) => engine.clock - item.start < item.duration)
+    .map((item) => item.id))
+  if (liveDamageNumberIds.size !== engine.damageNumbers.length) {
+    engine.damageNumbers = engine.damageNumbers.filter((item) => liveDamageNumberIds.has(item.id))
+    setDamageNumbers(engine.damageNumbers.slice())
   }
   engine.snapshotClock += dt
   if (engine.snapshotClock >= 0.1) {
@@ -403,6 +435,7 @@ function GameScene({ player, round, onHud }) {
   const refs = useRef({ yone: yoneRef, mordekaiser: mordekaiserRef })
   const engine = useRef(createEngine(player))
   const [effects, setEffects] = useState([])
+  const [damageNumbers, setDamageNumbers] = useState([])
   const [yoneClonePosition, setYoneClonePosition] = useState(null)
   const yoneCloneRef = useRef(null)
   const [visuals, setVisuals] = useState({
@@ -422,6 +455,7 @@ function GameScene({ player, round, onHud }) {
   useEffect(() => {
     engine.current = createEngine(player)
     setEffects([])
+    setDamageNumbers([])
     yoneCloneRef.current = null
     setYoneClonePosition(null)
     setVisuals({
@@ -437,7 +471,7 @@ function GameScene({ player, round, onHud }) {
       yone: `${current.actors.yone.animation}:${current.actors.yone.token}`,
       mordekaiser: `${current.actors.mordekaiser.animation}:${current.actors.mordekaiser.token}`,
     }
-    stepEngine(current, Math.min(delta, 0.04), refs.current, onHud, setEffects)
+    stepEngine(current, Math.min(delta, 0.04), refs.current, onHud, setEffects, setDamageNumbers)
     const clone = current.actors.yone.eClone
     if (clone !== yoneCloneRef.current) {
       yoneCloneRef.current = clone
@@ -490,6 +524,9 @@ function GameScene({ player, round, onHud }) {
         )}
       </Suspense>
       {effects.map((effect) => <CombatEffect key={effect.id} effect={effect} />)}
+      {damageNumbers.map((item) => (
+        <DamageNumber key={item.id} damage={item.damage} position={item.position} />
+      ))}
     </>
   )
 }
