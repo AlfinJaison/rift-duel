@@ -2,18 +2,9 @@ import { useCallback, useMemo, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { AdaptiveDpr, Preload } from '@react-three/drei'
 import GameScene from './game/GameScene.jsx'
+import { CHAMPIONS } from './champions/index.js'
 
-const CHAMPIONS = {
-  yone: { name: 'Yone', title: 'The Unforgotten', color: '#dc5362', accent: '#f29c67' },
-  mordekaiser: { name: 'Mordekaiser', title: 'The Iron Revenant', color: '#9f72ed', accent: '#49c9aa' },
-}
-
-const SKILLS = [
-  { key: 'q', name: 'Q', label: 'Steel', tint: '#83d4cf' },
-  { key: 'w', name: 'W', label: 'Guard', tint: '#75a9ef' },
-  { key: 'e', name: 'E', label: 'Dash', tint: '#db8bff' },
-  { key: 'r', name: 'R', label: 'Ultimate', tint: '#f0bc70' },
-]
+const SKILL_KEYS = ['q', 'w', 'e', 'r']
 
 function HealthBar({ name, title, value, side, color }) {
   const percent = Math.max(0, Math.min(100, value))
@@ -104,11 +95,12 @@ function App() {
 
       <div className="bottom-hud">
         <div className="skill-bar">
-          {SKILLS.map((skill) => {
-            const cooldown = hud.cooldowns[skill.key] || 0
+          {SKILL_KEYS.map((key) => {
+            const skill = playerInfo.skills[key]
+            const cooldown = hud.cooldowns[key] || 0
             return (
-              <div className={`skill ${cooldown > 0 ? 'cooling' : ''}`} key={skill.key} style={{ '--skill-tint': skill.tint }}>
-                <div className="skill-icon"><span>{skill.key.toUpperCase()}</span>{cooldown > 0 && <b>{cooldown.toFixed(1)}</b>}</div>
+              <div className={`skill ${cooldown > 0 ? 'cooling' : ''}`} key={key} style={{ '--skill-tint': skill.tint }}>
+                <div className="skill-icon"><span>{key.toUpperCase()}</span>{cooldown > 0 && <b>{cooldown.toFixed(1)}</b>}</div>
                 <div className="skill-label">{skill.label}</div>
               </div>
             )

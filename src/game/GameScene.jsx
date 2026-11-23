@@ -2,39 +2,25 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, Html } from '@react-three/drei'
 import { Plane, Raycaster, Vector2, Vector3 } from 'three'
-import Champion from './Champion.jsx'
 import Arena from './Arena.jsx'
 import CombatEffect from './CombatEffect.jsx'
 import { createHitboxPolygon, getHitboxForwardExtent, isTargetInsideHitbox } from './hitboxes.js'
+import { CHAMPIONS } from '../champions/index.js'
+import Yone from '../champions/Yone.jsx'
+import Mordekaiser from '../champions/Mordekaiser.jsx'
 
 const ABILITY_KEYS = ['q', 'w', 'e', 'r']
 const MAX_HEALTH = 100
 const ARENA_BOUNDS = { x: 8.2, z: 4.2 }
-const SKILL_DATA = {
-  yone: {
-    q: { damage: 18, cooldown: 1.0, color: '#80ded3', animation: 'q', hitbox: { type: 'rectangle', length: 3, width: 1 } },
-    w: { damage: 13, cooldown: 1.0, color: '#80aef3', animation: 'w', hitbox: { type: 'equilateralTriangle', side: 6 } },
-    e: { damage: 17, range: 5.2, cooldown: 6.8, color: '#cf8cff', animation: 'e' },
-    r: { damage: 28, range: 6.4, cooldown: 10.5, color: '#f5bd74', animation: 'r' },
-    attack: { damage: 8, range: 2.25, cooldown: 0.68, color: '#e7e4cd', animation: 'attack' },
-  },
-  mordekaiser: {
-    q: { damage: 20, range: 3.9, cooldown: 3.7, color: '#9a8cf4', animation: 'q' },
-    w: { damage: 12, range: 3.2, cooldown: 5.8, color: '#4bd8ba', animation: 'w' },
-    e: { damage: 16, range: 5.4, cooldown: 7.2, color: '#8d76e9', animation: 'e' },
-    r: { damage: 25, range: 6.5, cooldown: 10.5, color: '#e86787', animation: 'r' },
-    attack: { damage: 9, range: 2.45, cooldown: 0.82, color: '#a48cf0', animation: 'attack' },
-  },
-}
-
-function createActor(id, x) {
+function createActor(id) {
+  const champion = CHAMPIONS[id]
   return {
     id,
-    x,
-    z: 0,
+    x: champion.spawnPosition[0],
+    z: champion.spawnPosition[1],
     targetX: null,
     targetZ: null,
-    facing: id === 'yone' ? 0 : Math.PI,
+    facing: champion.initialFacing,
     eClone: null,
     eReturnAt: null,
     health: MAX_HEALTH,
@@ -47,12 +33,10 @@ function createActor(id, x) {
 }
 
 function createEngine(player) {
+  const opponent = player === 'yone' ? 'mordekaiser' : 'yone'
   return {
     player,
-    actors: {
-      yone: createActor('yone', -3.2),
-      mordekaiser: createActor('mordekaiser', 3.2),
-    },
+    actors: Object.fromEntries(Object.keys(CHAMPIONS).map((id) => [id, createActor(id)])),
     winner: null,
     clock: 0,
     snapshotClock: 0,
@@ -61,7 +45,7 @@ function createEngine(player) {
     keys: new Set(),
     queued: [],
     nextBotSkill: 1.5,
-    aimX: player === 'yone' ? 3.2 : -3.2,
+    aimX: CHAMPIONS[opponent].spawnPosition[0],
     aimZ: 0,
   }
 }
@@ -84,7 +68,7 @@ function snapshot(engine) {
 }
 
 function addEffect(engine, type, from, to, color) {
-  const hitboxDefinition = SKILL_DATA[from.id]?.[type]?.hitbox
+  const hitboxDefinition = CHAMPIONS[from.id]?.skills[type]?.hitbox
   const hitboxPolygon = hitboxDefinition ? createHitboxPolygon(from, from.facing, hitboxDefinition) : null
   engine.effects.push({
     id: ++engine.effectId,
@@ -99,13 +83,13 @@ function addEffect(engine, type, from, to, color) {
 }
 
 function isSkillHit(actor, target, skill) {
-  const data = SKILL_DATA[actor.id][skill]
+  const data = CHAMPIONS[actor.id].skills[skill]
   if (data.hitbox) return isTargetInsideHitbox(actor, target, actor.facing, data.hitbox)
   return Math.hypot(actor.x - target.x, actor.z - target.z) <= data.range
 }
 
 function applyHit(engine, attacker, target, skill, type, effectTarget = target) {
-  const data = SKILL_DATA[attacker.id][skill]
+  const data = CHAMPIONS[attacker.id].skills[skill]
   if (!isSkillHit(attacker, target, skill)) return false
   target.health = Math.max(0, target.health - data.damage)
   addEffect(engine, type, attacker, effectTarget, data.color)
@@ -114,9 +98,8 @@ function applyHit(engine, attacker, target, skill, type, effectTarget = target) 
 }
 
 function castSkill(engine, actor, target, skill) {
-  const data = SKILL_DATA[actor.id][skill]
+  const data = CHAMPIONS[actor.id].skills[skill]
   if (!data || isActionLocked(actor) || actor.cooldowns[skill] > 0 || actor.health <= 0) return
-  const isYoneE = actor.id === 'yone' && skill === 'e'
   const aimX = actor.id === engine.player ? engine.aimX : target.x
   const aimZ = actor.id === engine.player ? engine.aimZ : target.z
   const directionX = aimX - actor.x
@@ -124,20 +107,15 @@ function castSkill(engine, actor, target, skill) {
   const aimDistance = Math.hypot(directionX, directionZ)
   const aimDirectionX = aimDistance > 0.001 ? directionX / aimDistance : 0
   const aimDirectionZ = aimDistance > 0.001 ? directionZ / aimDistance : 1
-  if (!isYoneE) actor.facing = Math.atan2(directionX, directionZ)
   actor.cooldowns[skill] = data.cooldown
-  if (isYoneE) {
-    actor.eClone = { x: actor.x, z: actor.z }
-    actor.eReturnAt = engine.clock + 4
-    const dashX = aimDistance > 0.001 ? directionX / aimDistance : Math.sin(actor.facing)
-    const dashZ = aimDistance > 0.001 ? directionZ / aimDistance : Math.cos(actor.facing)
-    actor.facing = Math.atan2(dashX, dashZ)
-    actor.x = Math.max(-ARENA_BOUNDS.x, Math.min(ARENA_BOUNDS.x, actor.x + dashX * 3))
-    actor.z = Math.max(-ARENA_BOUNDS.z, Math.min(ARENA_BOUNDS.z, actor.z + dashZ * 3))
+  if (data.cast) {
+    data.cast({ actor, target, engine, aimX, aimZ, arenaBounds: ARENA_BOUNDS })
     return
   }
+
+  actor.facing = Math.atan2(directionX, directionZ)
   pushAnimation(actor, data.animation)
-  if (skill === 'e') {
+  if (data.dash) {
     const dx = directionX
     const dz = directionZ
     const distance = Math.hypot(dx, dz) || 1
@@ -158,7 +136,7 @@ function castSkill(engine, actor, target, skill) {
 }
 
 function castAttack(engine, actor, target) {
-  const data = SKILL_DATA[actor.id].attack
+  const data = CHAMPIONS[actor.id].skills.attack
   if (isActionLocked(actor) || actor.cooldowns.attack > 0 || actor.health <= 0) return
   const distance = Math.hypot(target.x - actor.x, target.z - actor.z)
   if (distance > data.range) return
@@ -491,27 +469,24 @@ function GameScene({ player, round, onHud }) {
       <Arena />
       <ContactShadows position={[0, 0.015, 0]} opacity={0.33} scale={24} blur={2.4} far={7} />
       <Suspense fallback={<Html center className="loading-note">Loading champion models...</Html>}>
-        <Champion
+        <Yone
           ref={yoneRef}
-          id="yone"
-          initialPosition={[-3.2, 0, 0]}
+          initialPosition={[CHAMPIONS.yone.spawnPosition[0], 0, CHAMPIONS.yone.spawnPosition[1]]}
           animation={visuals.yone.animation}
           token={visuals.yone.token}
           onAnimationComplete={handleAnimationComplete}
           ghost={Boolean(yoneClonePosition)}
         />
-        <Champion
+        <Mordekaiser
           ref={mordekaiserRef}
-          id="mordekaiser"
-          initialPosition={[3.2, 0, 0]}
+          initialPosition={[CHAMPIONS.mordekaiser.spawnPosition[0], 0, CHAMPIONS.mordekaiser.spawnPosition[1]]}
           animation={visuals.mordekaiser.animation}
           token={visuals.mordekaiser.token}
           onAnimationComplete={handleAnimationComplete}
         />
         {yoneClonePosition && (
-          <Champion
+          <Yone
             key={`${yoneClonePosition[0]}:${yoneClonePosition[1]}`}
-            id="yone"
             initialPosition={[yoneClonePosition[0], 0, yoneClonePosition[1]]}
             animation="idle"
             token={0}
