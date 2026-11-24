@@ -1,1 +1,40 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Vite and production builds
+dist/
+build/
+
+# Logs and diagnostic output
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.*.json
+
+# Test and coverage output
+coverage/
+.nyc_output/
+*.lcov
+
+# Local environment variables (keep the example template)
+.env
+.env.*
+!.env.example
+
+# Node runtime and package-manager caches
+pids/
+*.pid
+*.pid.lock
+.npm/
+.eslintcache
+.node_repl_history
+*.tgz
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
