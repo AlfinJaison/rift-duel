@@ -2,6 +2,10 @@
 
 A small React and React Three Fiber duel prototype built around the champion GLBs in `champion_models/`.
 
+## Live site
+
+[Play Rift Duel](https://alfinjaison.github.io/rift-duel/)
+
 ## Run locally
 
 ```sh
