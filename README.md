@@ -20,4 +20,8 @@ Open the local URL printed by Vite. The GLB files are loaded directly from `cham
 - Use the champion buttons in the top right to choose who you control; the other champion is the bot
 - `Fight Again` starts a fresh round
 
+## Deploy to GitHub Pages
+
+In the repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions**. The workflow deploys the site automatically after pushes to `main`.
+
 The arena is built from lightweight Three.js geometry because this folder does not include a terrain model.
