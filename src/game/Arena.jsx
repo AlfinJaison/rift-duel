@@ -113,14 +113,6 @@ function Arena() {
 
       <RuneStone position={[-9.4, 0, 0]} color="#61cdb9" />
       <RuneStone position={[9.4, 0, 0]} color="#9f82eb" />
-      <mesh position={[0, 0.16, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[1.8, 2.05, 0.3, 10]} />
-        <meshStandardMaterial color="#414d43" roughness={0.82} />
-      </mesh>
-      <mesh position={[0, 0.33, 0]}>
-        <cylinderGeometry args={[1.2, 1.3, 0.06, 10]} />
-        <meshStandardMaterial color="#69735a" roughness={0.78} />
-      </mesh>
     </group>
   )
 }

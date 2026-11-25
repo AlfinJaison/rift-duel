@@ -9,7 +9,6 @@ export const ARENA_ROCKS = [
 ]
 
 const ARENA_COLLIDERS = [
-  { x: 0, z: 0, radius: 2.05 },
   ...ARENA_ROCKS.map(([x, z, scale]) => ({ x, z, radius: scale * 0.78 })),
 ]
 
