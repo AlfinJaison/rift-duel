@@ -289,45 +289,45 @@ function stepEngine(engine, dt, refs, onHud, setEffects, setDamageNumbers) {
   }
   if (engine.winner) return
 
-  if (engine.player !== 'yone') {
-    const dx = playerActor.x - bot.x
-    const dz = playerActor.z - bot.z
-    const distance = Math.hypot(dx, dz) || 1
-    bot.aiTimer -= dt
-    if (!isActionLocked(bot)) {
-      if (distance > 2.05) {
-        const desiredRange = 1.75
-        const destination = {
-          x: playerActor.x - (dx / distance) * desiredRange,
-          z: playerActor.z - (dz / distance) * desiredRange,
-        }
-        if (shouldReplanActorPath(bot, destination)) setActorPath(engine, bot, destination)
-        const botMoving = walkActorPath(engine, bot, 2.05, dt)
-        setLocomotion(engine, bot, botMoving)
-      } else {
-        clearActorPath(bot)
-        setLocomotion(engine, bot, false)
-        if (bot.aiTimer <= 0) {
-          castAttack(engine, bot, playerActor)
-          bot.aiTimer = 1.05 + Math.random() * 0.35
-        }
+  const dx = playerActor.x - bot.x
+  const dz = playerActor.z - bot.z
+  const distance = Math.hypot(dx, dz) || 1
+  bot.aiTimer -= dt
+  if (!isActionLocked(bot)) {
+    bot.facing = Math.atan2(dx, dz)
+    if (distance > 2.05) {
+      const desiredRange = 1.75
+      const destination = {
+        x: playerActor.x - (dx / distance) * desiredRange,
+        z: playerActor.z - (dz / distance) * desiredRange,
+      }
+      if (shouldReplanActorPath(bot, destination)) setActorPath(engine, bot, destination)
+      const botMoving = walkActorPath(engine, bot, 2.05, dt)
+      setLocomotion(engine, bot, botMoving)
+    } else {
+      clearActorPath(bot)
+      setLocomotion(engine, bot, false)
+      if (bot.aiTimer <= 0) {
+        castAttack(engine, bot, playerActor)
+        bot.aiTimer = 1.05 + Math.random() * 0.35
       }
     }
+  }
 
-    if (!isActionLocked(bot)) {
-      engine.nextBotSkill -= dt
-      if (engine.nextBotSkill <= 0 && distance < 6.8) {
-        const candidates = ['q', 'e', 'r'].filter((skill) => {
-          const data = CHAMPIONS[bot.id].skills[skill]
-          if (bot.cooldowns[skill] > 0) return false
-          const castRange = data.range ?? (data.hitbox
-            ? getHitboxForwardExtent(data.hitbox) + CHAMPIONS[playerActor.id].colliderRadius
-            : 6.8)
-          return data.cast ? distance <= castRange : isSkillHit(bot, playerActor, skill)
-        })
-        if (candidates.length) castSkill(engine, bot, playerActor, candidates[Math.floor(Math.random() * candidates.length)])
-        engine.nextBotSkill = 2.2 + Math.random() * 1.4
-      }
+  if (!isActionLocked(bot)) {
+    engine.nextBotSkill -= dt
+    if (engine.nextBotSkill <= 0 && distance < 6.8) {
+      const botSkills = bot.id === 'mordekaiser' ? ['q'] : ['q', 'e', 'r']
+      const candidates = botSkills.filter((skill) => {
+        const data = CHAMPIONS[bot.id].skills[skill]
+        if (bot.cooldowns[skill] > 0) return false
+        const castRange = data.range ?? (data.hitbox
+          ? getHitboxForwardExtent(data.hitbox) + CHAMPIONS[playerActor.id].colliderRadius
+          : 6.8)
+        return data.cast ? distance <= castRange : isSkillHit(bot, playerActor, skill)
+      })
+      if (candidates.length) castSkill(engine, bot, playerActor, candidates[Math.floor(Math.random() * candidates.length)])
+      engine.nextBotSkill = 2.2 + Math.random() * 1.4
     }
   }
 

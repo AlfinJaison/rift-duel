@@ -111,7 +111,7 @@ export const yone = {
   recallFromE: recallYoneE,
   updateActiveSkill: updateYoneR,
   modelUrl,
-  animationDurations: { q: 0.5, w: 0.5 },
+  animationDurations: { q: 0.5, w: 0.5, attack: 0.3, attack2: 0.3 },
   animations: {
     idle: ['Idle1_Base'],
     move: ['Run_Base'],
