@@ -79,6 +79,8 @@ const Champion = forwardRef(function Champion({ champion, initialPosition, anima
       } else {
         action.reset()
         action.setLoop(LoopOnce, 1)
+        const animationDuration = champion.animationDurations?.[animation]
+        if (animationDuration) action.setDuration(animationDuration / clips.length)
       }
 
       action.clampWhenFinished = true
